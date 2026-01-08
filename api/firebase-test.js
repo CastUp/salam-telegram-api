@@ -1,23 +1,26 @@
-import admin from "./firebase-admin.js";
+import admin from "firebase-admin";
 
-export default async function handler(req, res) {
+if (!admin.apps.length) {
+  admin.initializeApp({
+    credential: admin.credential.cert({
+      projectId: process.env.FIREBASE_PROJECT_ID,
+      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+      privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, "\n"),
+    }),
+  });
+}
+
+export default function handler(req, res) {
   try {
-    const db = admin.firestore();
-
-    await db.collection("test").add({
-      message: "Firebase Admin is working!",
-      time: new Date(),
-    });
-
     res.status(200).json({
       success: true,
       message: "Firebase Admin connected successfully!",
     });
-  } catch (error) {
-    console.error("Firebase error:", error);
+  } catch (err) {
+    console.error("Firebase init error:", err);
     res.status(500).json({
       success: false,
-      error: error.message,
+      error: err.message,
     });
   }
 }
