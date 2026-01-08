@@ -1,74 +1,77 @@
 export default async function handler(req, res) {
-  // لازم نرد 200 فورًا
+  // Always respond 200 to Telegram immediately
   res.status(200).json({ ok: true });
 
   try {
     const update = req.body;
-    const msg = update?.message;
-    if (!msg) return;
+    const message = update?.message;
+    if (!message) return;
 
-    const chatId = msg.chat.id;
-    const text = msg.text || "";
+    const chatId = message.chat.id;
+    const text = message.text || "";
 
     const TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+    if (!TOKEN) {
+      console.error("Missing TELEGRAM_BOT_TOKEN");
+      return;
+    }
+
     const API = `https://api.telegram.org/bot${TOKEN}`;
 
-    // =========================
-    // طلب الرقم عند /start
-    // =========================
-    if (text.startsWith("/start")) {
+    // Helper function to send messages to Telegram
+    async function sendMessage(payload) {
       await fetch(`${API}/sendMessage`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          chat_id: chatId,
-          text: "🔐 لتسجيل الدخول اضغط الزر لمشاركة رقمك.",
-          reply_markup: {
-            keyboard: [[{ text: "📱 مشاركة رقم الهاتف", request_contact: true }]],
-            resize_keyboard: true,
-            one_time_keyboard: true
-          }
-        })
+        body: JSON.stringify(payload),
+      });
+    }
+
+    // =========================
+    // 1. When user starts the bot
+    // =========================
+    if (text.startsWith("/start")) {
+      await sendMessage({
+        chat_id: chatId,
+        text: "🔐 To continue, please share your phone number.",
+        reply_markup: {
+          keyboard: [[{ text: "📱 Share phone number", request_contact: true }]],
+          resize_keyboard: true,
+          one_time_keyboard: true,
+        },
       });
       return;
     }
 
     // =========================
-    // استقبال الرقم بأمان
+    // 2. When user sends contact
     // =========================
-    if (msg.contact) {
+    if (message.contact) {
+      const contact = message.contact;
 
-      // أهم تحقق أمني
-      if (msg.contact.user_id !== msg.from.id) {
-        await fetch(`${API}/sendMessage`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            chat_id: chatId,
-            text: "❌ لا يمكن استخدام رقم شخص آخر."
-          })
+      // 🔒 Security check: make sure the number belongs to the same user
+      if (contact.user_id !== message.from.id) {
+        await sendMessage({
+          chat_id: chatId,
+          text: "❌ You cannot use someone else's phone number.",
         });
         return;
       }
 
-      const phone = msg.contact.phone_number;
+      const phoneNumber = contact.phone_number;
 
-      await fetch(`${API}/sendMessage`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          chat_id: chatId,
-          text: `✅ تم استلام رقمك بنجاح:\n${phone}\n\nارجع للتطبيق لإكمال الدخول.`,
-          reply_markup: { remove_keyboard: true }
-        })
+      await sendMessage({
+        chat_id: chatId,
+        text:
+          "✅ Your phone number was received successfully:\n\n" +
+          phoneNumber +
+          "\n\nPlease return to the app to complete login.",
+        reply_markup: { remove_keyboard: true },
       });
 
-      // هنا لاحقًا هنربط الرقم بـ Flutter / Firebase
+      // 👉 Later we will connect this phone number with Flutter / Firebase
     }
-
-  } catch (e) {
-    console.error("Webhook error:", e);
+  } catch (error) {
+    console.error("Webhook error:", error);
   }
 }
-
-
